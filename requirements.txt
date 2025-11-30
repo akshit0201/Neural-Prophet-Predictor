@@ -3,4 +3,6 @@ yfinance
 pandas
 gradio
 plotly
+plotly-resampler
 torch
+ipython
