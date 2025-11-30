@@ -36,8 +36,8 @@ def predict_stock(ticker):
     if not ticker:
         return "⚠️ Please enter a ticker symbol.", None, None
 
-    status_msg = f"⏳ Analyzing {ticker}... Please wait (approx 10-30 seconds)."
-    print(f"Processing {ticker}")
+    # Status update for the logs
+    print(f"Processing {ticker}...")
 
     try:
         # 1. Get Data
@@ -55,7 +55,6 @@ def predict_stock(ticker):
                 if 'Close' in df.columns:
                     df = df[['Close']].reset_index()
                 else:
-                    # Fallback for single level extraction
                     df = data['Close'].reset_index()
             except:
                 # Brute force flatten
@@ -77,13 +76,12 @@ def predict_stock(ticker):
             return f"❌ Not enough historical data found for {ticker} (Need > 100 days).", None, None
 
         # 2. Train Model
+        # FIX: Removed 'trainer_config' to prevent PyTorch Lightning crash
         m = NeuralProphet(
             yearly_seasonality=True,
             weekly_seasonality=True,
             daily_seasonality=False,
-            learning_rate=0.01,
-            # Disable progress bars for clean logs
-            trainer_config={"enable_progress_bar": False} 
+            learning_rate=0.01
         )
 
         m.fit(df, freq="D")
@@ -117,7 +115,7 @@ def predict_stock(ticker):
         """
 
         # 6. Generate Plots
-        # NeuralProphet plot() returns a plotly figure object
+        # Note: We rely on standard m.plot() which returns a plotly figure
         fig_forecast = m.plot(forecast)
         fig_components = m.plot_components(forecast)
 
