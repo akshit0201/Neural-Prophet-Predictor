@@ -1,0 +1,6 @@
+neuralprophet
+yfinance
+pandas
+gradio
+plotly
+torch
