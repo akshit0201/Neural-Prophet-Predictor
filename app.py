@@ -36,18 +36,16 @@ def predict_stock(ticker):
     if not ticker:
         return "⚠️ Please enter a ticker symbol.", None, None
 
-    # Status update for the logs
     print(f"Processing {ticker}...")
 
     try:
         # 1. Get Data
         data = yf.download(ticker, period="3y", interval="1d", progress=False)
 
-        # Handle cases where yfinance returns empty dataframe or multi-index columns
         if data.empty:
             return f"❌ Could not find data for ticker '{ticker}'. Please check the symbol.", None, None
         
-        # Flatten MultiIndex if present (yfinance update quirk)
+        # Flatten MultiIndex if present
         if isinstance(data.columns, pd.MultiIndex):
             try:
                 # Attempt to extract just the Close column for the specific ticker
@@ -60,7 +58,6 @@ def predict_stock(ticker):
                 # Brute force flatten
                 df = data.copy()
                 df.columns = ['_'.join(col).strip() for col in df.columns.values]
-                # Look for a column containing "Close"
                 close_col = [c for c in df.columns if "Close" in c][0]
                 df = df[[close_col]].reset_index()
         else:
@@ -68,15 +65,12 @@ def predict_stock(ticker):
 
         # Rename for NeuralProphet
         df.columns = ['ds', 'y']
-        
-        # Ensure dates are timezone-naive
         df['ds'] = df['ds'].dt.tz_localize(None)
 
         if len(df) < 100:
             return f"❌ Not enough historical data found for {ticker} (Need > 100 days).", None, None
 
         # 2. Train Model
-        # FIX: Removed 'trainer_config' to prevent PyTorch Lightning crash
         m = NeuralProphet(
             yearly_seasonality=True,
             weekly_seasonality=True,
@@ -97,55 +91,117 @@ def predict_stock(ticker):
         # Calculate ROI
         roi = ((predicted_price - current_price) / current_price) * 100
 
-        # Generate Verdict
-        if roi > 10: verdict = "STRONG BUY 🟢"
-        elif roi > 2: verdict = "BUY 🟢"
-        elif roi > -5: verdict = "HOLD 🟡"
-        else: verdict = "SELL 🔴"
+        # Generate Verdict & Colors
+        if roi > 10: 
+            verdict = "STRONG BUY 🚀"
+            color = "#10B981" # Green
+            bg_color = "#D1FAE5"
+        elif roi > 2: 
+            verdict = "BUY 🟢"
+            color = "#10B981" # Green
+            bg_color = "#D1FAE5"
+        elif roi > -5: 
+            verdict = "HOLD 🟡"
+            color = "#F59E0B" # Yellow
+            bg_color = "#FEF3C7"
+        else: 
+            verdict = "SELL 🔴"
+            color = "#EF4444" # Red
+            bg_color = "#FEE2E2"
 
-        # 5. formatting Output Text
-        report = f"""
-### 📊 Analysis Report: {ticker}
-**Current Price:** {current_price:.2f}
-**90-Day Target:** {predicted_price:.2f}
-**Projected ROI:** {roi:.2f}%
-**Verdict:** {verdict}
-
-*Disclaimer: Apply due diligence before investing.*
+        # 5. Format Output HTML (Pretty Dashboard)
+        # Using inline CSS to ensure it looks good in Gradio
+        html_report = f"""
+        <div style="border: 2px solid {color}; border-radius: 10px; padding: 20px; background-color: {bg_color}; color: #1F2937; text-align: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 1.5rem; text-transform: uppercase; color: {color};">{verdict}</h2>
+            <p style="margin-top: 5px; font-size: 0.9rem; opacity: 0.8;">Forecast Horizon: 90 Days</p>
+            
+            <div style="display: flex; justify-content: space-around; margin-top: 20px;">
+                <div>
+                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">Current</div>
+                    <div style="font-size: 1.5rem; font-weight: bold;">{current_price:.2f}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">Target</div>
+                    <div style="font-size: 1.5rem; font-weight: bold;">{predicted_price:.2f}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">ROI</div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: {color};">{roi:+.2f}%</div>
+                </div>
+            </div>
+        </div>
         """
 
         # 6. Generate Plots
-        # Note: We rely on standard m.plot() which returns a plotly figure
         fig_forecast = m.plot(forecast)
+        fig_forecast.update_layout(title_text="Price Forecast (Blue = Prediction)", title_x=0.5)
+        
         fig_components = m.plot_components(forecast)
+        fig_components.update_layout(title_text="Seasonality & Trend Analysis", title_x=0.5)
 
-        return report, fig_forecast, fig_components
+        return html_report, fig_forecast, fig_components
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return f"❌ An error occurred while processing {ticker}: {str(e)}", None, None
+        return f"<h3 style='color: red'>❌ Error: {str(e)}</h3>", None, None
 
 # --- STEP 3: GRADIO INTERFACE ---
 
-with gr.Blocks(theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 📈 NeuralProphet Stock Predictor")
-    gr.Markdown("Enter a stock ticker (e.g., `AAPL`, `TSLA`, `AZN.L`) to generate a 90-day forecast.")
+# Custom CSS for a cleaner look
+custom_css = """
+.container { max-width: 900px; margin: auto; }
+.footer { text-align: center; font-size: 0.8em; margin-top: 20px; }
+"""
+
+with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as demo:
     
-    with gr.Row():
-        ticker_input = gr.Textbox(label="Ticker Symbol", placeholder="e.g. AZN.L", value="AZN.L")
-        submit_btn = gr.Button("Analyze Stock", variant="primary")
-    
-    result_text = gr.Markdown(label="Verdict")
-    
-    with gr.Row():
-        plot1 = gr.Plot(label="Price Forecast")
-        plot2 = gr.Plot(label="Seasonality Components")
+    with gr.Column(elem_classes="container"):
+        gr.Markdown(
+            """
+            # 🔮 NeuralProphet Stock Predictor
+            **AI-Powered 90-Day Price Forecasts**
+            """
+        )
+        
+        with gr.Row():
+            with gr.Column(scale=3):
+                ticker_input = gr.Textbox(
+                    label="Stock Ticker", 
+                    placeholder="e.g. AZN.L, AAPL, TSLA", 
+                    value="AZN.L",
+                    show_label=False,
+                    container=False
+                )
+            with gr.Column(scale=1):
+                submit_btn = gr.Button("🚀 Analyze", variant="primary")
+
+        # HTML Result Dashboard
+        result_html = gr.HTML(label="Analysis Results")
+        
+        with gr.Row():
+            plot1 = gr.Plot(label="Forecast")
+            plot2 = gr.Plot(label="Seasonality")
+
+        with gr.Accordion("ℹ️ Disclaimer & Info", open=False):
+            gr.Markdown("""
+            **How it works:** This app downloads 3 years of daily data and trains a NeuralProphet model on-the-fly. 
+            It detects yearly and weekly seasonality to project price action 90 days out.
+            
+            **Disclaimer:** This tool is for educational purposes only. It is not financial advice. 
+            AI models can hallucinate trends. Always do your own research.
+            """)
+            
+        gr.Examples(
+            examples=["AZN.L", "AAPL", "NVDA", "TSCO.L", "BTC-USD"],
+            inputs=ticker_input
+        )
 
     submit_btn.click(
         fn=predict_stock, 
         inputs=ticker_input, 
-        outputs=[result_text, plot1, plot2]
+        outputs=[result_html, plot1, plot2]
     )
 
 if __name__ == "__main__":
