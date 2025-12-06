@@ -111,7 +111,7 @@ def predict_stock(ticker):
 **Projected ROI:** {roi:.2f}%
 **Verdict:** {verdict}
 
-*Disclaimer: This is an AI-generated forecast based on historical trends. Not financial advice.*
+*Disclaimer: Apply due diligence before investing.*
         """
 
         # 6. Generate Plots
