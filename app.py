@@ -189,8 +189,8 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as demo:
             **How it works:** This app downloads 3 years of daily data and trains a NeuralProphet model on-the-fly. 
             It detects yearly and weekly seasonality to project price action 90 days out.
             
-            **Disclaimer:** This tool is for educational purposes only. It is not financial advice. 
-            AI models can hallucinate trends. Always do your own research.
+            **Disclaimer:** 
+            AI models can hallucinate trends. Always do your own research before investing.
             """)
             
         gr.Examples(
